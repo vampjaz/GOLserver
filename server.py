@@ -4,12 +4,16 @@
 HOST="0.0.0.0"
 PORT=31337
 
+VISUALIZERHOST="0.0.0.0"
+VISUALIZERPORT=12003
+
 SIZE=1024  ## side length
 ## on the board: 0 = off, 1 = player1, 2 = player2, 3 = neither??
 
 import os,sys
 import random
 import socket
+import time
 
 def getcell(board,x,y):
 	# returns 0 if off the board
@@ -32,15 +36,65 @@ def getmoves(tlv):
 	movs = [(int(tlv[i:i+4],16),int(tlv[i+4:i+8],16)) for i in range(4,4+leng*2,8)]
 	return movs
 
+def iterlife(board):
+	newboard = [[0 for i in range(SIZE)] for i in range(SIZE)]
+	for x in range(SIZE):
+		for y in range(SIZE):
+			p1neighbors = sum([1 if c==1 else 0 for c in [board[x-1][y-1],board[x][y-1],board[x+1][y-1],board[x-1][y],board[x+1][y],board[x-1][y+1],board[x][y+1],board[x+1][y+1]]])
+			p2neighbors = sum([1 if c==2 else 0 for c in [board[x-1][y-1],board[x][y-1],board[x+1][y-1],board[x-1][y],board[x+1][y],board[x-1][y+1],board[x][y+1],board[x+1][y+1]]])
+			if board[x][y] == 0:
+				if p1neighbors == 3 and p2neighbors == 0:
+					newboard[x][y] = 1
+				if p2neighbors == 3 and p1neighbors == 0:
+					newboard[x][y] = 2
+			elif board[x][y] == 1:
+				if p1neighbors < 2 or p1neighbors > 3:
+					newboard[x][y] = 0
+				if p1neighbors == 2 or p1neighbors == 3:
+					newboard[x][y] = 1
+			elif board[x][y] == 2:
+				if p2neighbors < 2 or p2neighbors > 3:
+					newboard[x][y] = 0
+				if p2neighbors == 2 or p2neighbors == 3:
+					newboard[x][y] = 1
+	return newboard
+
 def rungame(opp1,opp2):
 	# set up variables
+	time.sleep(1)
+	i,p1name = gettlv(opp1.recv(1024))
+	i,p2name = gettlv(opp2.recv(1024))
 	board = [[0 for i in range(SIZE)] for i in range(SIZE)]
 	playing = True ## no win conditions that i've seen
 	p1score = 0
 	p2score = 0
+	rounds = 0
+	print "variables set up"
+	print "now starting {} vs. {}".format(p1name,p2name)
+	sendtlv(opp1,'S',p2name)
+	sendtlv(opp2,'S',p1name)
 	while playing:
-		pass ## tbd
-
+		board = iterlife(board)
+		sendtlv(opp1,'G','')
+		sendtlv(opp2,'G','')
+		# opp1 moves
+		sendtlv(opp1,'T','')
+		time.sleep(2) # there's probably a better way to wait for a valid packet
+		mv = opp1.recv(2048)
+		moves = getmoves(mv)
+		opp2.sendall(mv) # should be the exact same format that it expects
+		for i in moves:
+			if board[i[0]][i[1]] == 0:
+				board[i[0]][i[1]] = 1
+		# opp2 moves
+		sendtlv(opp2,'T','')
+		time.sleep(2) # there's probably a better way to wait for a valid packet
+		mv = opp2.recv(2048)
+		moves = getmoves(mv)
+		opp1.sendall(mv) # should be the exact same format that it expects
+		for i in moves:
+			if board[i[0]][i[1]] == 0:
+				board[i[0]][i[1]] = 2
 
 
 def main():
