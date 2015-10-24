@@ -1,11 +1,16 @@
 ## simplified server for http://meta.codegolf.stackexchange.com/a/1332/16472
 ## wish me luck
 
+# server listen address
 HOST="0.0.0.0"
 PORT=31337
 
+# for later
 VISUALIZERHOST="0.0.0.0"
 VISUALIZERPORT=12003
+
+# storage (sqlite3)
+DATABASE="golkoth.db"
 
 SIZE=1024  ## side length
 LENGTH=3000 # round time in seconds
@@ -15,6 +20,14 @@ import os,sys
 import random
 import socket
 import time
+import sqlite3
+
+if not os.path.exists(DATABASE):
+	conn = sqlite3.connection(DATABASE)
+	c = conn.cursor()
+	c.execute("CREATE TABLE rounds (player1 text, player2 text, p1score int, p2score int, winner int)")
+	conn.commit()
+	conn.close()
 
 class GameError:
 	def __init__(self, value):
@@ -181,12 +194,17 @@ def rungame(opp1,opp2):
 		print "player 1 ({}) won!".format(p1name)
 	elif p2score > p1score:
 		win = 2
-		print "player 1 ({}) won!".format(p1name)
+		print "player 2 ({}) won!".format(p2name)
 	else:
 		win = -1
 		print "there was a tie"
 	## now to store the data. i'm thinking sqlite3
-
+	conn = sqlite3.connection(DATABASE)
+	c = conn.cursor()
+	#                        (player1 text, player2 text, p1score int, p2score int, winner int)
+	c.execute("INSERT INTO rounds VALUES ?,?,?,?,?",(p1name,p2name,p1score,p2score,win))
+	conn.commit()
+	conn.close()
 
 def main():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
