@@ -15,11 +15,20 @@ import random
 import socket
 import time
 
+class GameError:
+	def __init__(self, value):
+		self.value = value
+	def __str__(self):
+		return repr(self.value)
+
 def getcell(board,x,y):
 	# returns 0 if off the board
 	if x < 0 or x >= SIZE or y < 0 or y >= SIZE:
 		return 0
 	return board[x][y]
+
+"""
+# these ones use hex... oops
 
 def sendtlv(sock,tid,tstr):
 	s = "{:02x}{:02x}".format(ord(tid),len(tstr)).upper() + "".join("{:02x}".format(ord(c)).upper() for c in tstr)
@@ -28,12 +37,36 @@ def sendtlv(sock,tid,tstr):
 def gettlv(tlv):
 	tid = chr(int(tlv[0:2],16))
 	leng = int(tlv[2:4],16)
-	text = ''.join(chr(int(tlv[i:i+2],16)) for i in range(4,4+leng*2,2))
+	if not leng = len(tlv[4:]):
+		raise GameError("tlv length doesn't match")
+	text = ''.join(chr(int(tlv[i:i+2],16)) for i in range(4,len(tlv),2))
 	return tid,text
 
 def getmoves(tlv):
 	leng = int(tlv[2:4],16)
-	movs = [(int(tlv[i:i+4],16),int(tlv[i+4:i+8],16)) for i in range(4,4+leng*2,8)]
+	if not leng = len(tlv[4:]):
+		raise GameError("tlv move length doesn't match")
+	movs = [(int(tlv[i:i+4],16),int(tlv[i+4:i+8],16)) for i in range(4,len(tlv),8)]
+	return movs
+"""
+
+def sendtlv(sock,tid,tstr):
+	s = "{}{}".format(tid,chr(len(tstr))) + tstr
+	sock.sendall(s)
+
+def gettlv(tlv):
+	tid = tlv[0]
+	leng = ord(tlv[1])
+	if not leng = len(tlv[2:]):
+		raise GameError("tlv length doesn't match")
+	text = tlv[2:]
+	return tid,text
+
+def getmoves(tlv):
+	leng = ord(tlv[1])
+	if not leng = len(tlv[2:]):
+		raise GameError("tlv move length doesn't match")
+	movs = [(ord(tlv[i]) + 256*ord(tlv[i+1]),ord(tlv[i+2]) + 256*ord(tlv[i+3])) for i in range(2,len(tlv),4)]
 	return movs
 
 def iterlife(board):
@@ -61,9 +94,19 @@ def iterlife(board):
 
 def rungame(opp1,opp2):
 	# set up variables
+	# here we swap the two sockets at random:
+	if random.random() > 0.5:
+		temp = opp1
+		opp1 = opp2
+		opp2 = temp
+		del temp
 	time.sleep(1)
 	i,p1name = gettlv(opp1.recv(1024))
+	if not i == 'I':
+		raise GameError("player 1 didn't identify properly")
 	i,p2name = gettlv(opp2.recv(1024))
+	if not i == 'I':
+		raise GameError("player 2 didn't identify properly")
 	board = [[0 for i in range(SIZE)] for i in range(SIZE)]
 	playing = True ## no win conditions that i've seen
 	p1score = 0
@@ -81,7 +124,13 @@ def rungame(opp1,opp2):
 		sendtlv(opp1,'T','')
 		time.sleep(2) # there's probably a better way to wait for a valid packet
 		mv = opp1.recv(2048)
+		i,t = gettlv(mv)
+		if not i == 'M':
+			raise GameError("opponent 1 didn't send a Move")
 		moves = getmoves(mv)
+		print "opponent 1 sent " + repr(moves)
+		if len(moves) > 30:
+			raise GameError("opponent 1 passed too many moves")
 		opp2.sendall(mv) # should be the exact same format that it expects
 		for i in moves:
 			if board[i[0]][i[1]] == 0:
@@ -90,7 +139,13 @@ def rungame(opp1,opp2):
 		sendtlv(opp2,'T','')
 		time.sleep(2) # there's probably a better way to wait for a valid packet
 		mv = opp2.recv(2048)
+		i,t = gettlv(mv)
+		if not i == 'M':
+			raise GameError("opponent 2 didn't send a Move")
 		moves = getmoves(mv)
+		print "opponent 2 sent " + repr(moves)
+		if len(moves) > 30:
+			raise GameError("opponent 2 passed too many moves")
 		opp1.sendall(mv) # should be the exact same format that it expects
 		for i in moves:
 			if board[i[0]][i[1]] == 0:
