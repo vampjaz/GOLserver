@@ -8,6 +8,7 @@ VISUALIZERHOST="0.0.0.0"
 VISUALIZERPORT=12003
 
 SIZE=1024  ## side length
+LENGTH=3000 # round time in seconds
 ## on the board: 0 = off, 1 = player1, 2 = player2, 3 = neither??
 
 import os,sys
@@ -92,6 +93,17 @@ def iterlife(board):
 					newboard[x][y] = 1
 	return newboard
 
+def countcells(board):
+	p1cells = 0
+	p2cells = 0
+	for i in board:
+		for c in i:
+			if c == 1:
+				p1cells+=1
+			elif c == 2:
+				p2cells+=1
+	return p1cells,p2cells
+
 def rungame(opp1,opp2):
 	# set up variables
 	# here we swap the two sockets at random:
@@ -112,6 +124,7 @@ def rungame(opp1,opp2):
 	p1score = 0
 	p2score = 0
 	rounds = 0
+	starttime = time.time()
 	print "variables set up"
 	print "now starting {} vs. {}".format(p1name,p2name)
 	sendtlv(opp1,'S',p2name)
@@ -120,9 +133,18 @@ def rungame(opp1,opp2):
 		board = iterlife(board)
 		sendtlv(opp1,'G','')
 		sendtlv(opp2,'G','')
+		# count up cells
+		p1score,p2score = countcells(board)
+		'''if p1score == 0 or p2score == 0:  # not sure if needed
+			print "player 1 ran out of cells" if p1score == 0 else "player 2 ran out of cells"
+			playing = False
+			break'''
+		if time.time() > starttime + LENGTH:
+			playing = False
+			break
 		# opp1 moves
 		sendtlv(opp1,'T','')
-		time.sleep(2) # there's probably a better way to wait for a valid packet
+		#time.sleep(2) # there's probably a better way to wait for a valid packet
 		mv = opp1.recv(2048)
 		i,t = gettlv(mv)
 		if not i == 'M':
@@ -137,11 +159,11 @@ def rungame(opp1,opp2):
 				board[i[0]][i[1]] = 1
 		# opp2 moves
 		sendtlv(opp2,'T','')
-		time.sleep(2) # there's probably a better way to wait for a valid packet
+		#time.sleep(2) # there's probably a better way to wait for a valid packet
 		mv = opp2.recv(2048)
 		i,t = gettlv(mv)
 		if not i == 'M':
-			raise GameError("opponent 2 didn't send a Move")
+			raise GameError("opponent 2 didn't send a move")
 		moves = getmoves(mv)
 		print "opponent 2 sent " + repr(moves)
 		if len(moves) > 30:
@@ -150,6 +172,20 @@ def rungame(opp1,opp2):
 		for i in moves:
 			if board[i[0]][i[1]] == 0:
 				board[i[0]][i[1]] = 2
+	print "game finished"
+	print "p1 cells left: {}, p2 cells left: {}".format(p1score,p2score)
+	## figure out who won
+	win = 0
+	if p1score > p2score:
+		win = 1
+		print "player 1 ({}) won!".format(p1name)
+	elif p2score > p1score:
+		win = 2
+		print "player 1 ({}) won!".format(p1name)
+	else:
+		win = -1
+		print "there was a tie"
+	## now to store the data. i'm thinking sqlite3
 
 
 def main():
